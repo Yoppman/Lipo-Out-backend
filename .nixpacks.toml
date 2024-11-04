@@ -1,0 +1,8 @@
+[environment]
+python_version = "3.11.9"
+
+[build]
+command = "poetry install"
+
+[run]
+command = "poetry run python main.py"

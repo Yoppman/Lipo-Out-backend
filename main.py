@@ -1,4 +1,5 @@
-from typing import Optional, Annotated  # Import Optional from typing
+import logging
+from typing import Optional, Annotated
 from fastapi import FastAPI, HTTPException, Query, status, Depends
 from contextlib import asynccontextmanager
 from sqlmodel import SQLModel, Field, select, Relationship
@@ -8,10 +9,15 @@ from sqlalchemy import BigInteger, Column
 from dotenv import load_dotenv
 import os
 
+# Load environment variables
 load_dotenv()
 
-# postgres_url = os.getenv('POSTGRES_PUCLIC_URL')  # Or 'POSTGRES_URL' if using an internal URL
-postgres_url = "postgresql://postgres:VnJaVEablDlNcELbBpSrdqGOwDSFNPQA@junction.proxy.rlwy.net:22238/railway"
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Database connection URL (use environment variable or fallback to a string for testing)
+postgres_url = os.getenv('POSTGRES_PUBLIC_URL', "postgresql://postgres:VnJaVEablDlNcELbBpSrdqGOwDSFNPQA@junction.proxy.rlwy.net:22238/railway")
 # Ensure the URL is prefixed correctly
 if 'asyncpg' not in postgres_url:
     postgres_url = postgres_url.replace('postgresql://', 'postgresql+asyncpg://')
@@ -32,9 +38,9 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Put your startup code here
+    logger.info("Starting application...")
     yield
-    # Put your shutdown code here
+    logger.info("Shutting down application...")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -49,6 +55,7 @@ class UserBase(SQLModel):
 
 
 class User(UserBase, table=True):
+    __table_args__ = {"extend_existing": True}
     id: Optional[int] = Field(default=None, primary_key=True)
     goal: str
     foods: list["Food"] = Relationship(back_populates="user")
@@ -76,6 +83,7 @@ class FoodBase(SQLModel):
     calories: Optional[float] = Field(default=0.0, description="Caloric content")
 
 class Food(FoodBase, table=True):
+    __table_args__ = {"extend_existing": True}
     food_id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
     user: User = Relationship(back_populates="foods")
@@ -238,3 +246,17 @@ async def delete_food(food_id: int, session: SessionDep):
     await session.delete(food)
     await session.commit()
     return {"detail": "Food deleted successfully"}
+
+
+# Add a root endpoint to check if the server is running
+@app.get("/")
+async def root():
+    logger.info("Root endpoint accessed")
+    return {"message": "API is running"}
+
+# Ensure your application listens on the port from the environment variable, or default to 8000
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    logger.info(f"Starting server on port {port}")
+    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
