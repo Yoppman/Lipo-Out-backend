@@ -4,20 +4,19 @@ from fastapi import FastAPI, HTTPException, Query, status, Depends
 from contextlib import asynccontextmanager
 from sqlmodel import SQLModel, Field, select, Relationship
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, joinedload
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy import BigInteger, Column
 from dotenv import load_dotenv
+import uvicorn
 import os
+import logging
 
-# Load environment variables
-load_dotenv()
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Database connection URL (use environment variable or fallback to a string for testing)
-postgres_url = os.getenv('POSTGRES_PUBLIC_URL', "postgresql://postgres:VnJaVEablDlNcELbBpSrdqGOwDSFNPQA@junction.proxy.rlwy.net:22238/railway")
+load_dotenv()
+
+postgres_url = os.getenv('POSTGRES_PUCLIC_URL', "postgresql://postgres:VnJaVEablDlNcELbBpSrdqGOwDSFNPQA@junction.proxy.rlwy.net:22238/railway")  # Or 'POSTGRES_URL' if using an internal URL
+
 # Ensure the URL is prefixed correctly
 if 'asyncpg' not in postgres_url:
     postgres_url = postgres_url.replace('postgresql://', 'postgresql+asyncpg://')
@@ -56,6 +55,7 @@ class UserBase(SQLModel):
 
 class User(UserBase, table=True):
     __table_args__ = {"extend_existing": True}
+    __tablename__ = 'user'  # Ensure table name is consistent
     id: Optional[int] = Field(default=None, primary_key=True)
     goal: str
     foods: list["Food"] = Relationship(back_populates="user")
@@ -253,10 +253,3 @@ async def delete_food(food_id: int, session: SessionDep):
 async def root():
     logger.info("Root endpoint accessed")
     return {"message": "API is running"}
-
-# Ensure your application listens on the port from the environment variable, or default to 8000
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    logger.info(f"Starting server on port {port}")
-    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
