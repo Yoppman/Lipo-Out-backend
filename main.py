@@ -1,5 +1,6 @@
 from typing import Optional, Annotated  # Import Optional from typing
 from fastapi import FastAPI, HTTPException, Query, status, Depends
+from contextlib import asynccontextmanager
 from sqlmodel import SQLModel, Field, select, Relationship
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, joinedload
@@ -9,8 +10,8 @@ import os
 
 load_dotenv()
 
-postgres_url = os.getenv('POSTGRES_PUCLIC_URL')  # Or 'POSTGRES_URL' if using an internal URL
-
+# postgres_url = os.getenv('POSTGRES_PUCLIC_URL')  # Or 'POSTGRES_URL' if using an internal URL
+postgres_url = "postgresql://postgres:VnJaVEablDlNcELbBpSrdqGOwDSFNPQA@junction.proxy.rlwy.net:22238/railway"
 # Ensure the URL is prefixed correctly
 if 'asyncpg' not in postgres_url:
     postgres_url = postgres_url.replace('postgresql://', 'postgresql+asyncpg://')
@@ -28,13 +29,14 @@ async def get_session() -> AsyncSession:
 # Annotated type for FastAPI dependency injection
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-app = FastAPI()
 
-@app.on_event("startup")
-async def on_startup():
-    async with engine.begin() as conn:
-        # Ensure the database schema is created if it doesn't exist
-        await conn.run_sync(SQLModel.metadata.create_all)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Put your startup code here
+    yield
+    # Put your shutdown code here
+
+app = FastAPI(lifespan=lifespan)
 
 # Models
 class UserBase(SQLModel):
