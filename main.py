@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-postgres_url = os.getenv('POSTGRES_PUCLIC_URL', "postgresql://postgres:VnJaVEablDlNcELbBpSrdqGOwDSFNPQA@junction.proxy.rlwy.net:22238/railway")  # Or 'POSTGRES_URL' if using an internal URL
+postgres_url = os.getenv('POSTGRES_URL')  # Or 'POSTGRES_URL' if using an internal URL
 
 # Ensure the URL is prefixed correctly
 if 'asyncpg' not in postgres_url:
