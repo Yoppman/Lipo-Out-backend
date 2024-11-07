@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import BigInteger, Column
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
 import logging
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 postgres_url = os.getenv('POSTGRES_URL')  # Or 'POSTGRES_URL' if using an internal URL
-
+postgres_url = "postgresql://postgres:leZfVJuoupqiTPbTcizIIbbpfsggAUII@junction.proxy.rlwy.net:40673/railway"
 # Ensure the URL is prefixed correctly
 if 'asyncpg' not in postgres_url:
     postgres_url = postgres_url.replace('postgresql://', 'postgresql+asyncpg://')
@@ -34,14 +35,37 @@ async def get_session() -> AsyncSession:
 # Annotated type for FastAPI dependency injection
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-
+# when database exists
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting application...")
     yield
     logger.info("Shutting down application...")
 
+origins = [
+    "*",  # Allows requests from any origin
+    # Add specific origins if needed
+]
+
 app = FastAPI(lifespan=lifespan)
+
+# Add CORS middleware to allow requests from specified origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+
+# # when init database
+# app = FastAPI()
+
+# @app.on_event("startup")
+# async def on_startup():
+#     async with engine.begin() as conn:
+#         await conn.run_sync(SQLModel.metadata.create_all)
 
 # Models
 class UserBase(SQLModel):
