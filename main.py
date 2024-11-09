@@ -6,6 +6,8 @@ from sqlmodel import SQLModel, Field, select, Relationship
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import BigInteger, Column
+from datetime import datetime
+from sqlalchemy import DateTime
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -106,18 +108,24 @@ class FoodBase(SQLModel):
     fat: Optional[float] = Field(default=0.0, description="Fat content in grams")
     calories: Optional[float] = Field(default=0.0, description="Caloric content")
 
+# Updated Food model to include the date column
 class Food(FoodBase, table=True):
     __table_args__ = {"extend_existing": True}
     food_id: Optional[int] = Field(default=None, primary_key=True)
     user_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    date: datetime = Field(default_factory=datetime.utcnow)  # New date column with default timestamp
     user: User = Relationship(back_populates="foods")
 
+# Updated FoodPublic and FoodCreate to include the date field
 class FoodPublic(FoodBase):
     food_id: int
     user_id: int
+    date: Optional[datetime] = None  # Optional date field for food creation
+
 class FoodCreate(FoodBase):
     food_photo: bytes
     user_id: int
+    date: Optional[datetime] = None  # Make date optional
 
 # FoodUpdate model for updating food entries
 class FoodUpdate(FoodBase):
@@ -212,7 +220,6 @@ async def delete_user(user_id: int, session: SessionDep):
     await session.commit()
     return {"detail": "User deleted successfully"}
 
-# Updated endpoint to create food
 @app.post("/foods/", response_model=FoodPublic)
 async def create_food(food: FoodCreate, session: SessionDep):
     # Check if the user exists
@@ -220,18 +227,48 @@ async def create_food(food: FoodCreate, session: SessionDep):
     if not db_user:
         raise HTTPException(status_code=400, detail="User not found")
 
+    # Prepare the food data, making `date` naive if it’s provided
+    food_data = food.dict(exclude_unset=True)
+
+    # Convert `date` to naive format if it exists
+    if food_data.get("date"):
+        food_data["date"] = food_data["date"].replace(tzinfo=None)
+
     # Create the Food instance
-    db_food = Food(**food.dict())
+    db_food = Food(**food_data)
     session.add(db_food)
     await session.commit()
     await session.refresh(db_food)
     return db_food
 
 @app.get("/foods/", response_model=list[FoodPublic])
-async def read_foods(session: SessionDep, offset: int = 0, limit: int = 100):
-    query = select(Food).offset(offset).limit(limit)
+async def read_foods(
+    session: SessionDep, 
+    user_id: Optional[int] = Query(None, description="ID of the user to filter foods by"), 
+    date: Optional[datetime] = Query(None, description="Retrieve foods uploaded after this date"),
+    offset: int = 0, 
+    limit: int = 100
+):
+    # Build the query based on the presence of `user_id` and `date`
+    query = select(Food)
+    
+    # Apply filters based on `user_id` and `date`
+    if user_id:
+        query = query.where(Food.user_id == user_id)
+    if date:
+        query = query.where(Food.date > date)
+    
+    # Apply pagination
+    query = query.offset(offset).limit(limit)
+    
+    # Execute the query and retrieve results
     result = await session.execute(query)
     foods = result.scalars().all()
+    
+    # Check if no foods found for the user or date range
+    if (user_id or date) and not foods:
+        raise HTTPException(status_code=404, detail="No foods found for the specified filters")
+    
     return foods
 
 @app.get("/foods/{food_id}", response_model=FoodPublic)
