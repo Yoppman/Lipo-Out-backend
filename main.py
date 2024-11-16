@@ -3,10 +3,11 @@ from typing import Optional, Annotated
 from fastapi import FastAPI, HTTPException, Query, status, Depends
 from contextlib import asynccontextmanager
 from sqlmodel import SQLModel, Field, select, Relationship
+from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import BigInteger, Column
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy import DateTime
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,7 +38,20 @@ async def get_session() -> AsyncSession:
 # Annotated type for FastAPI dependency injection
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-# when database exists
+# # Initialize databbase
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     logger.info("Starting application...")
+
+#     # Ensure the database tables are created
+#     async with engine.begin() as conn:
+#         await conn.run_sync(SQLModel.metadata.create_all)
+
+#     yield  # Keep the app running while initialized
+
+#     logger.info("Shutting down application...")
+
+# # when database exists
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting application...")
@@ -61,14 +75,6 @@ app.add_middleware(
 )
 
 
-# # when init database
-# app = FastAPI()
-
-# @app.on_event("startup")
-# async def on_startup():
-#     async with engine.begin() as conn:
-#         await conn.run_sync(SQLModel.metadata.create_all)
-
 # Models
 class UserBase(SQLModel):
     name: str = Field(index=True)
@@ -81,10 +87,13 @@ class UserBase(SQLModel):
 
 class User(UserBase, table=True):
     __table_args__ = {"extend_existing": True}
-    __tablename__ = 'user'  # Ensure table name is consistent
+    __tablename__ = 'user'
     id: Optional[int] = Field(default=None, primary_key=True)
     goal: str
     foods: list["Food"] = Relationship(back_populates="user")
+    water_intakes: list["WaterIntake"] = Relationship(back_populates="user")
+    sleep_records: list["SleepRecord"] = Relationship(back_populates="user")
+    calories_workouts: list["CaloriesWorkout"] = Relationship(back_populates="user")
 
 class UserPublic(UserBase):
     id: int
@@ -135,6 +144,33 @@ class FoodUpdate(FoodBase):
     carb: Optional[float] = None
     fat: Optional[float] = None
     calories: Optional[float] = None
+
+class WaterIntake(SQLModel, table=True):
+    __tablename__ = 'water_intake'
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(default=None, foreign_key="user.id")
+    date: datetime = Field(default_factory=datetime.utcnow)
+    water_ml: int = Field(default=0, description="Total water intake in milliliters")
+    user: User = Relationship(back_populates="water_intakes")
+
+
+class SleepRecord(SQLModel, table=True):
+    __tablename__ = 'sleep_records'
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(default=None, foreign_key="user.id")
+    date: datetime = Field(default_factory=datetime.utcnow)
+    hours: int = Field(default=0, description="Hours of sleep")
+    minutes: int = Field(default=0, description="Minutes of sleep")
+    user: User = Relationship(back_populates="sleep_records")
+
+
+class CaloriesWorkout(SQLModel, table=True):
+    __tablename__ = 'calories_workout'
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(default=None, foreign_key="user.id")
+    date: datetime = Field(default_factory=datetime.utcnow)
+    calories: int = Field(default=0, description="Calories burned")
+    user: User = Relationship(back_populates="calories_workouts")
 
 # Endpoints
 @app.post("/users/", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
@@ -308,6 +344,113 @@ async def delete_food(food_id: int, session: SessionDep):
     await session.commit()
     return {"detail": "Food deleted successfully"}
 
+
+@app.post("/water/add", status_code=status.HTTP_201_CREATED)
+async def add_water_entry(user_id: int, water_ml: int, session: SessionDep):
+    entry = WaterIntake(user_id=user_id, water_ml=water_ml)
+    session.add(entry)
+    await session.commit()
+    return {"message": "Water intake entry added successfully"}
+
+@app.get("/water/total/{user_id}")
+async def get_total_water(
+    user_id: int,
+    session: SessionDep,
+    date: Optional[date] = Query(default=date.today(), description="Date to retrieve water intake")
+):
+    # Define the start and end of the day for the given date
+    start_of_day = datetime.combine(date, datetime.min.time())
+    end_of_day = datetime.combine(date, datetime.max.time())
+    
+    # Query for water intake within the day's range
+    result = await session.execute(
+        select(WaterIntake).where(
+            and_(
+                WaterIntake.user_id == user_id,
+                WaterIntake.date >= start_of_day,
+                WaterIntake.date <= end_of_day
+            )
+        )
+    )
+    entries = result.scalars().all()
+    total = sum(entry.water_ml for entry in entries)
+    return {"user_id": user_id, "date": date, "total_water_ml": total}
+
+@app.post("/sleep/add", status_code=status.HTTP_201_CREATED)
+async def add_sleep_entry(user_id: int, hours: int, minutes: int, session: SessionDep):
+    entry = SleepRecord(user_id=user_id, hours=hours, minutes=minutes)
+    session.add(entry)
+    await session.commit()
+    return {"message": "Sleep record added successfully"}
+
+
+@app.get("/sleep/{user_id}")
+async def get_sleep_records(
+    user_id: int,
+    session: SessionDep,
+    date: Optional[date] = Query(default=date.today(), description="Date to retrieve sleep record")
+):
+    # Define the start and end of the day for the given date
+    start_of_day = datetime.combine(date, datetime.min.time())
+    end_of_day = datetime.combine(date, datetime.max.time())
+
+    # Query for sleep records within the day's range
+    result = await session.execute(
+        select(SleepRecord).where(
+            and_(
+                SleepRecord.user_id == user_id,
+                SleepRecord.date >= start_of_day,
+                SleepRecord.date <= end_of_day
+            )
+        )
+    )
+    entries = result.scalars().all()
+    
+    if entries:
+        # Normalize hours and minutes if minutes >= 60
+        total_minutes = sum(entry.hours * 60 + entry.minutes for entry in entries)
+        normalized_hours = total_minutes // 60
+        normalized_minutes = total_minutes % 60
+        return {
+            "user_id": user_id,
+            "date": date,
+            "hours": normalized_hours,
+            "minutes": normalized_minutes
+        }
+    else:
+        # Default response if no data exists
+        return {"user_id": user_id, "date": date, "hours": 0, "minutes": 0}
+
+@app.post("/calories/add", status_code=status.HTTP_201_CREATED)
+async def add_calories_entry(user_id: int, calories: int, session: SessionDep):
+    entry = CaloriesWorkout(user_id=user_id, calories=calories)
+    session.add(entry)
+    await session.commit()
+    return {"message": "Calories workout entry added successfully"}
+
+@app.get("/calories/{user_id}")
+async def get_total_calories(
+    user_id: int,
+    session: SessionDep,
+    date: Optional[date] = Query(default=date.today(), description="Date to retrieve calories data")
+):
+    # Define the start and end of the day for the given date
+    start_of_day = datetime.combine(date, datetime.min.time())
+    end_of_day = datetime.combine(date, datetime.max.time())
+
+    # Query for calories burned within the day's range
+    result = await session.execute(
+        select(CaloriesWorkout).where(
+            and_(
+                CaloriesWorkout.user_id == user_id,
+                CaloriesWorkout.date >= start_of_day,
+                CaloriesWorkout.date <= end_of_day
+            )
+        )
+    )
+    entries = result.scalars().all()
+    total = sum(entry.calories for entry in entries)
+    return {"user_id": user_id, "date": date, "total_calories": total}
 
 # Add a root endpoint to check if the server is running
 @app.get("/")
