@@ -3,7 +3,7 @@ from typing import Optional, Annotated
 from fastapi import FastAPI, HTTPException, Query, status, Depends
 from contextlib import asynccontextmanager
 from sqlmodel import SQLModel, Field, select, Relationship
-from sqlalchemy import and_
+from sqlalchemy import and_, desc
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import BigInteger, Column
@@ -394,7 +394,7 @@ async def get_sleep_records(
     start_of_day = datetime.combine(date, datetime.min.time())
     end_of_day = datetime.combine(date, datetime.max.time())
 
-    # Query for sleep records within the day's range
+    # Query for the newest sleep record within the day's range
     result = await session.execute(
         select(SleepRecord).where(
             and_(
@@ -402,18 +402,18 @@ async def get_sleep_records(
                 SleepRecord.date >= start_of_day,
                 SleepRecord.date <= end_of_day
             )
-        )
+        ).order_by(desc(SleepRecord.date))
     )
-    entries = result.scalars().all()
+    entry = result.scalars().first()
     
-    if entries:
+    if entry:
         # Normalize hours and minutes if minutes >= 60
-        total_minutes = sum(entry.hours * 60 + entry.minutes for entry in entries)
+        total_minutes = entry.hours * 60 + entry.minutes
         normalized_hours = total_minutes // 60
         normalized_minutes = total_minutes % 60
         return {
             "user_id": user_id,
-            "date": date,
+            "date": entry.date.date(),  # Extract the date part
             "hours": normalized_hours,
             "minutes": normalized_minutes
         }
