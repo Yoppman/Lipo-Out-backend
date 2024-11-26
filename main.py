@@ -2,6 +2,8 @@ import logging
 from urllib.parse import unquote  # Import unquote for decoding URL-encoded strings
 from typing import Optional, Annotated
 from fastapi import FastAPI, HTTPException, Query, status, Depends
+import requests
+from fastapi import APIRouter
 from contextlib import asynccontextmanager
 from sqlmodel import SQLModel, Field, select, Relationship
 from sqlalchemy import and_, desc
@@ -574,6 +576,34 @@ async def get_total_calories(
         "start_of_day_utc": start_of_day_utc,
         "end_of_day_utc": end_of_day_utc
     }
+
+router = APIRouter()
+
+@router.post("/generate-invoice")
+async def generate_invoice():
+    bot_token = os.getenv("BOT_TOKEN")
+    url = f'https://api.telegram.org/bot{bot_token}/createInvoiceLink'
+
+    payload = {
+        'title': 'Lipo-Out Membership🌟',
+        'description': 'Coming soon!',
+        'payload': 'Custom-Payload',
+        'provider_token': '',  # Empty for Telegram Stars
+        'currency': 'XTR',
+        'prices': [{'label': 'Test', 'amount': 1}],  # Amount in smallest currency units
+    }
+
+    response = requests.post(url, json=payload)
+    data = response.json()
+
+    if data.get('ok'):
+        invoice_link = data['result']
+        return {'invoice_link': invoice_link}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to generate invoice link")
+
+# Include the router in your FastAPI app
+app.include_router(router)
 
 # Add a root endpoint to check if the server is running
 @app.get("/")
