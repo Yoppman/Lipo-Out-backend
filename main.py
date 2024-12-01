@@ -292,7 +292,7 @@ async def delete_user(user_id: int, session: SessionDep):
     await session.commit()
     return {"detail": "User deleted successfully"}
 
-@app.post("/foods/", response_model=FoodPublic)
+@app.post("/foods/", response_model=FoodPublic, status_code=status.HTTP_201_CREATED)
 async def create_food(food: FoodCreate, session: SessionDep):
     # Check if the user exists
     db_user = await session.get(User, food.user_id)
