@@ -42,7 +42,7 @@ async def get_session() -> AsyncSession:
 # Annotated type for FastAPI dependency injection
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
-# # Initialize databbase
+########## Initialize databbase ##########
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
 #     logger.info("Starting application...")
@@ -54,13 +54,15 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 #     yield  # Keep the app running while initialized
 
 #     logger.info("Shutting down application...")
+########## Initialize databbase ##########
 
-# # when database exists
+########## when database exists ##########
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting application...")
     yield
     logger.info("Shutting down application...")
+########## when database exists ##########
 
 origins = [
     "*",  # Allows requests from any origin
@@ -86,6 +88,7 @@ class UserBase(SQLModel):
     height: Optional[int] = Field(default=None, index=True)
     weight: Optional[int] = Field(default=None, index=True)
     goal: Optional[str] = Field(default=None, index=True)
+    target_weight: Optional[int] = Field(default=None, index=True)
     telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, index=True))
 
 
@@ -111,6 +114,7 @@ class UserUpdate(UserBase):
     weight: Optional[int] = None
     height: Optional[int] = None
     goal: Optional[str] = None
+    target_weight: Optional[int] = None
     telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, index=True))
 
 class FoodBase(SQLModel):
