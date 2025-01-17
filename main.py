@@ -9,7 +9,7 @@ from sqlmodel import SQLModel, Field, select, Relationship
 from sqlalchemy import and_, desc
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import BigInteger, Column, TIMESTAMP
+from sqlalchemy import BigInteger, String, Column, TIMESTAMP
 from datetime import datetime, date
 from sqlalchemy import DateTime
 from dotenv import load_dotenv
@@ -90,6 +90,7 @@ class UserBase(SQLModel):
     goal: Optional[str] = Field(default=None, index=True)
     target_weight: Optional[int] = Field(default=None, index=True)
     telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, index=True))
+    line_user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), unique=True, index=True))
 
 
 class User(UserBase, table=True):
@@ -116,6 +117,7 @@ class UserUpdate(UserBase):
     goal: Optional[str] = None
     target_weight: Optional[int] = None
     telegram_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger, index=True))
+    line_user_id: Optional[str] = Field(default=None, sa_column=Column(String(36), unique=True, index=True))
 
 class FoodBase(SQLModel):
     food_analysis: str
@@ -226,6 +228,7 @@ async def read_users(
     session: SessionDep,
     name: Optional[str] = Query(None),  # Optional name query parameter
     telegram_id: Optional[int] = Query(None),  # Optional telegram_id query parameter
+    line_user_id: Optional[str] = Query(None),
     offset: int = 0,
     limit: Annotated[int, Query(le=100)] = 100,
 ):
@@ -234,6 +237,8 @@ async def read_users(
         query = select(User).where(User.name == name)
     elif telegram_id:
         query = select(User).where(User.telegram_id == telegram_id)
+    elif line_user_id:
+        query = select(User).where(User.line_user_id == line_user_id)
     else:
         query = select(User).offset(offset).limit(limit)
 
